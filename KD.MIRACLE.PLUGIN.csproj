@@ -80,6 +80,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CusMaterialSaveValidatorPlugin.cs" />
     <Compile Include="DyListtBill.cs" />
     <Compile Include="GetDyUpdateData.cs" />
     <Compile Include="ListOpen.cs" />
