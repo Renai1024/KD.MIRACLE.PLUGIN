@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
-using Kingdee.BOS.App.Data;
-using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using System.ComponentModel;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
+using Kingdee.BOS.App.Data;
 using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using Kingdee.BOS.Util;
 
 namespace KD.MIRACLE.PLUGIN
 {
@@ -14,11 +15,12 @@ namespace KD.MIRACLE.PLUGIN
     public class GetDyUpdateData : AbstractDynamicFormPlugIn
     {
         public string entity = "F_SCS_Entity";
-        int count = 0;
-        int index = 1;
+
 
         public override void AfterBarItemClick(AfterBarItemClickEventArgs e)
         {
+            int count = 0;
+            int index = 1;
             base.AfterBarItemClick(e);
             if (e.BarItemKey.Equals("SCS_MODIFY_DY_DATA"))
             {
@@ -30,11 +32,12 @@ namespace KD.MIRACLE.PLUGIN
                 //判断是否获取到行信息
                 if (collection.Count == 0)
                 {
-                    this.View.ShowMessage("未获取到动态表单数据！");
+                    this.View.ShowErrMessage("未获取到动态表单数据！");
                     return;
                 }
                 try
                 {
+                    List<int> errLine = new List<int>();
                     foreach (DynamicObject row in collection)
                     {
                         string FID = row["F_FID"].ToString();
@@ -82,31 +85,61 @@ namespace KD.MIRACLE.PLUGIN
 							INNER JOIN T_SAL_ORDERENTRY_D S3 on S2.FENTRYID = S3.FENTRYID
                             WHERE S1.FID = '{0}' AND S2.FENTRYID = '{1}' 
                         ";
-                        //若获取到行日期为空
+
+                        string updateSql4 = @"/*dialect*/
+                            UPDATE S2 SET 
+                            S2.F_SHENGGUANHUIFUYUANYOU1 = '{2}',
+                            S2.F_SHENGGUANHUIFUYUANYOU2 = '{3}',
+                            S2.F_SHENGGUANHUIFUYUANYOU3 = '{4}'
+                            FROM T_SAL_ORDER S1
+                            INNER JOIN T_SAL_ORDERENTRY S2 ON S1.FID = S2.FID
+                            WHERE S1.FID = '{0}' AND S2.FENTRYID = '{1}' 
+                        ";
+
                         if (judge(updateDate).ContainsKey("ERROR"))
                         {
-                            this.View.ShowErrMessage("第" + index + "行" + judge(updateDate).Values.First().ToString());
-                            return;
+                            if (FREASON1.IsNullOrEmptyOrWhiteSpace() && FREASON2.IsNullOrEmptyOrWhiteSpace() && FREASON3.IsNullOrEmptyOrWhiteSpace())
+                            {
+                                this.View.ShowErrMessage("第" + index + "行" + judge(updateDate).Values.First().ToString());
+                                return;
+                            }
+                            else
+                            {
+                                var result4 = DBUtils.Execute(this.Context,
+                                        string.Format(updateSql4,
+                                        FID, FENTRYID, FREASON1, FREASON2, FREASON3));
+                                if (result4 == 0)
+                                {
+                                    errLine.Add(index);
+                                    this.View.ShowErrMessage("第" + index + "行修改失败！");
+                                    return;
+                                }
+                            }
                         }
-                        var result = DBUtils.Execute(this.Context,
+                        else
+                        {
+                            var result = DBUtils.Execute(this.Context,
                             string.Format(updateSql,
                             FID, FENTRYID,
                             judge(updateDate).Keys.First().ToString(), judge(updateDate).Values.First().ToString(),
                             FREASON1, FREASON2, FREASON3));
 
-                        var result2 = DBUtils.Execute(this.Context,
-                            string.Format(updateSql2,
-                            FID, FENTRYID,
-                            judge(updateDate).Values.First().ToString()));
+                            var result2 = DBUtils.Execute(this.Context,
+                                string.Format(updateSql2,
+                                FID, FENTRYID,
+                                judge(updateDate).Values.First().ToString()));
 
-                        var result3 = DBUtils.Execute(this.Context,
-                            string.Format(updateSql3,
-                            FID, FENTRYID,
-                            judge(updateDate).Values.First().ToString()));
-                        if (result == 0 || result2 == 0 || result3 == 0)
-                        {
-                            this.View.ShowErrMessage("第" + index + "行修改失败！");
-                            return;
+                            var result3 = DBUtils.Execute(this.Context,
+                                string.Format(updateSql3,
+                                FID, FENTRYID,
+                                judge(updateDate).Values.First().ToString()));
+
+                            if (result == 0 || result2 == 0 || result3 == 0)
+                            {
+                                errLine.Add(index);
+                                this.View.ShowErrMessage("第" + index + "行修改失败！");
+                                return;
+                            }
                         }
                         index++;
                         count++;
@@ -114,6 +147,11 @@ namespace KD.MIRACLE.PLUGIN
                     if (count == collection.Count)
                     {
                         this.View.ShowMessage("修改成功，总计" + count + "行数据成功保存");
+                    }
+                    else
+                    {
+                        string lineList = string.Join("、", errLine);
+                        this.View.ShowErrMessage("第" + lineList + "行修改失败，请联系管理员！");
                     }
                 }
                 catch (Exception ex)
@@ -140,10 +178,15 @@ namespace KD.MIRACLE.PLUGIN
             {
                 tmp.Add("F_SHENGGUANHUIFUJIAOQI1", dic["F_Date1"]);
             }
-            else tmp.Add("ERROR", "回复交期均为空，请填写数据后提交！");
+            else tmp.Add("ERROR", "回复交期及回复原由均为空，请填写数据后提交！");
             return tmp;
         }
 
 
+        //public object convert(string str)
+        //{
+        //    if (str != "") return str.ToString();
+        //    else return null;
+        //}
     }
 }
